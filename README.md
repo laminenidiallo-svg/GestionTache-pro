@@ -123,18 +123,6 @@ Les tâches sont également sauvegardées localement avec AsyncStorage pour :
 - Persister les données entre les sessions
 - Améliorer les performances
 
-
-## 🤝 Contribution
-
-Les contributions sont les bienvenues !
-
-1. Fork le projet
-2. Créez une branche (`git checkout -b feature/amelioration`)
-3. Committez vos changements (`git commit -m 'Ajout d'une fonctionnalité'`)
-4. Poussez sur la branche (`git push origin feature/amelioration`)
-5. Ouvrez une Pull Request
-
-
 ## 👨‍💻 Auteur
 
 **Mamadou Lamine Diallo**
