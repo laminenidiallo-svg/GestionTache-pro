@@ -18,10 +18,21 @@ export const fetchTasksFromAPI = createAsyncThunk(
     try {
       // Appeler l'API pour récupérer les tâches
       const data = await fetchTasks();
-      return data; // Retourner les tâches
+      // Retourner un objet pour indiquer que c'est bien venu de l'API
+      return { tasks: data, fromCache: false };
     } catch (error) {
-      // Si erreur, on retourne le message d'erreur
-      return rejectWithValue(error.message);
+      // En cas d'erreur réseau, tenter de retourner les tâches sauvegardées localement
+      console.error('fetchTasksFromAPI error:', error?.message || error);
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        const parsed = stored ? JSON.parse(stored) : [];
+        // Retourner les tâches locales en indiquant que c'est un fallback
+        return { tasks: parsed, fromCache: true, originalError: error?.message };
+      } catch (storageError) {
+        // Si la lecture locale échoue aussi, rejeter pour afficher l'erreur
+        console.error('Error reading storage fallback:', storageError);
+        return rejectWithValue(error?.message || 'Erreur réseau');
+      }
     }
   }
 );
@@ -69,8 +80,8 @@ export const removeTask = createAsyncThunk(
 );
 
 // Charger les tâches sauvegardées localement
-export const loadTasks = createAsyncThunk(
-  'tasks/loadTasks',
+export const loadTasksFromStorage = createAsyncThunk(
+  'tasks/loadFromStorage',
   async () => {
     try {
       // Lire dans AsyncStorage (comme lire dans un fichier)
@@ -83,6 +94,15 @@ export const loadTasks = createAsyncThunk(
     }
   }
 );
+
+// Fonction helper pour sauvegarder dans AsyncStorage
+const saveTasksToStorage = async (tasks) => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+  } catch (error) {
+    console.error('Erreur sauvegarde:', error);
+  }
+};
 
 // ========== SLICE (le "morceau" d'état Redux) ==========
 
@@ -107,7 +127,7 @@ const tasksSlice = createSlice({
         // Inverser le statut : true devient false, false devient true
         task.completed = !task.completed;
         // Sauvegarder immédiatement dans AsyncStorage
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+        saveTasksToStorage(state.items);
       }
     },
     
@@ -127,13 +147,32 @@ const tasksSlice = createSlice({
         state.loading = true; // Afficher le loader
         state.error = null;   // Pas d'erreur pour l'instant
       })
-      // Succès : tâches reçues
+      // Succès : tâches reçues (peut venir de l'API ou du cache local)
       .addCase(fetchTasksFromAPI.fulfilled, (state, action) => {
-        state.loading = false;              // Cacher le loader
-        state.items = action.payload;       // Mettre les tâches dans le state
-        state.lastSync = new Date().toISOString(); // Noter la date
-        // Sauvegarder localement
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(action.payload));
+        state.loading = false; // Cacher le loader
+
+        // action.payload peut être { tasks, fromCache }
+        const payload = action.payload;
+        const apiTasks = Array.isArray(payload) ? payload : (payload.tasks || []);
+        const fromCache = payload && payload.fromCache === true;
+
+        // Préserver les tâches locales créées par l'utilisateur (ID > 1000)
+        const localTasks = state.items.filter(t => t.id > 1000);
+
+        // Dédupliquer : éviter d'ajouter des tâches API dont l'ID existe déjà
+        const localIds = new Set(localTasks.map(t => t.id));
+        const filteredApiTasks = apiTasks.filter(t => !localIds.has(t.id));
+
+        // Combiner : tâches locales en premier, puis tâches API filtrées
+        state.items = [...localTasks, ...filteredApiTasks];
+
+        // Mettre à jour lastSync seulement si la source vient réellement de l'API
+        if (!fromCache) {
+          state.lastSync = new Date().toISOString();
+        }
+
+        // Sauvegarder localement (même si c'est une fallback, on veut garder l'état cohérent)
+        saveTasksToStorage(state.items);
       })
       // Erreur
       .addCase(fetchTasksFromAPI.rejected, (state, action) => {
@@ -152,7 +191,7 @@ const tasksSlice = createSlice({
         // Ajouter la nouvelle tâche AU DÉBUT du tableau
         state.items.unshift(action.payload);
         // Sauvegarder
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+        saveTasksToStorage(state.items);
       })
       .addCase(addTask.rejected, (state, action) => {
         state.loading = false;
@@ -174,7 +213,7 @@ const tasksSlice = createSlice({
           state.items[index] = action.payload;
         }
         // Sauvegarder
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+        saveTasksToStorage(state.items);
       })
       .addCase(modifyTask.rejected, (state, action) => {
         state.loading = false;
@@ -192,7 +231,7 @@ const tasksSlice = createSlice({
         // Filtrer pour garder toutes les tâches SAUF celle supprimée
         state.items = state.items.filter(t => t.id !== action.payload);
         // Sauvegarder
-        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
+        saveTasksToStorage(state.items);
       })
       .addCase(removeTask.rejected, (state, action) => {
         state.loading = false;
@@ -201,11 +240,29 @@ const tasksSlice = createSlice({
     
     // ===== CHARGER LES TÂCHES LOCALES =====
     builder
-      .addCase(loadTasks.fulfilled, (state, action) => {
-        // Si des tâches existent localement, les charger
-        if (action.payload.length > 0) {
-          state.items = action.payload;
+      .addCase(loadTasksFromStorage.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(loadTasksFromStorage.fulfilled, (state, action) => {
+        state.loading = false;
+        // Charger les tâches depuis AsyncStorage
+        // Dédupliquer par ID au chargement pour éviter collisions héritées
+        const loaded = Array.isArray(action.payload) ? action.payload : [];
+        const seen = new Set();
+        const deduped = [];
+        for (const t of loaded) {
+          if (!t || typeof t.id === 'undefined') continue;
+          const key = t.id;
+          if (!seen.has(key)) {
+            seen.add(key);
+            deduped.push(t);
+          }
         }
+        state.items = deduped;
+      })
+      .addCase(loadTasksFromStorage.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message;
       });
   },
 });

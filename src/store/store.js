@@ -15,12 +15,12 @@ const store = configureStore({
   },
   
   // middleware : fonctions qui interceptent les actions avant qu'elles arrivent au reducer
-  // getDefaultMiddleware : donne les middlewares par défaut (Redux DevTools, etc.)
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      // serializableCheck : vérifie que tout est "sérialisable" (peut être converti en JSON)
-      // On le désactive car AsyncStorage utilise des Promises (non sérialisables)
-      serializableCheck: false,
+      // On désactive ces vérifications pour éviter les warnings avec AsyncStorage
+      serializableCheck: {
+        ignoredActions: ['tasks/loadTasks/fulfilled', 'tasks/fetchTasks/fulfilled'],
+      },
     }),
 });
 
