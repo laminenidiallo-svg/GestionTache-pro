@@ -42,9 +42,17 @@ export const addTask = createAsyncThunk(
   'tasks/addTask',
   async (task, { rejectWithValue }) => {
     try {
-      // Envoyer la nouvelle tâche à l'API
-      const newTask = await createTask(task);
-      return newTask; // Retourner la tâche créée
+      // Création locale avec ID unique basé sur timestamp
+      const newTask = {
+        id: Date.now(), // ID unique
+        title: task.title,
+        completed: false,
+        priority: task.priority || 'low',
+        description: task.description || '',
+        createdAt: new Date().toISOString(),
+        userId: 1,
+      };
+      return newTask;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -54,11 +62,24 @@ export const addTask = createAsyncThunk(
 // Modifier une tâche existante
 export const modifyTask = createAsyncThunk(
   'tasks/modifyTask',
-  async ({ id, updates }, { rejectWithValue }) => {
+  async ({ id, updates }, { rejectWithValue, getState }) => {
     try {
-      // Envoyer les modifications à l'API
-      const updatedTask = await updateTask(id, updates);
-      return updatedTask; // Retourner la tâche modifiée
+      // Modification locale uniquement (l'API JSONPlaceholder est en lecture seule)
+      const state = getState();
+      const existingTask = state.tasks.items.find(t => t.id === id);
+      
+      if (!existingTask) {
+        throw new Error('Tâche introuvable');
+      }
+      
+      // Créer la tâche mise à jour
+      const updatedTask = {
+        ...existingTask,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+      
+      return updatedTask;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -70,9 +91,9 @@ export const removeTask = createAsyncThunk(
   'tasks/removeTask',
   async (id, { rejectWithValue }) => {
     try {
-      // Demander à l'API de supprimer la tâche
-      await deleteTask(id);
-      return id; // Retourner l'ID de la tâche supprimée
+      // Suppression locale uniquement (l'API JSONPlaceholder est en lecture seule)
+      // Pas besoin d'appeler l'API, on retourne juste l'ID
+      return id;
     } catch (error) {
       return rejectWithValue(error.message);
     }

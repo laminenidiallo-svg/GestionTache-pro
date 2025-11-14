@@ -34,6 +34,8 @@ export default function AppNavigator() {
         component={TaskFormScreen}
         options={({ route }) => ({
           title: route.params?.task ? 'Modifier la tâche' : 'Nouvelle tâche',
+          headerBackTitle: '', // Texte vide
+          headerBackTitleVisible: false, // Cache complètement le titre sur iOS
         })}
       />
       
@@ -42,6 +44,8 @@ export default function AppNavigator() {
         component={TaskDetailScreen}
         options={{
           title: 'Détails de la tâche',
+          headerBackTitle: '', // Texte vide
+          headerBackTitleVisible: false, // Cache complètement le titre sur iOS
         }}
       />
     </Stack.Navigator>

@@ -198,13 +198,13 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    gap: 8,
     marginBottom: 16,
   },
   statusBadge: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20, // Arrondi pour effet "pill"
+    marginRight: 8,
   },
   statusCompleted: {
     backgroundColor: '#d1fae5', // Vert clair
@@ -279,12 +279,12 @@ const styles = StyleSheet.create({
   },
   actions: {
     marginTop: 8,
-    gap: 12, // Espace entre les boutons
   },
   actionButton: {
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
+    marginBottom: 12,
   },
   toggleButton: {
     backgroundColor: '#6366f1', // Violet
